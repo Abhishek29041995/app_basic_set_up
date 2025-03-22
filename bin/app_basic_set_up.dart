@@ -31,6 +31,7 @@ void main() async {
   await _updateConfigFile(flavors, baseUrls);
   await _updateAndroidFiles(flavors, packageIds);
   await _updateIOSFiles(flavors, packageIds);
+  await _generateMainFiles(flavors);
 
   print("\n✅ Flavor setup completed!");
 }
@@ -58,6 +59,26 @@ class Config {
 
   configFile.writeAsStringSync(content);
   print("✅ Updated lib/config.dart");
+}
+
+/// Generates `main_<flavor>.dart` files
+Future<void> _generateMainFiles(List<String> flavors) async {
+  for (var flavor in flavors) {
+    File mainFile = File('lib/main_$flavor.dart');
+    String content = '''
+import 'package:flutter/material.dart';
+import 'config.dart';
+import 'app.dart'; // Ensure this file exists in your project
+
+void main() {
+  Config.appFlavor = Flavor.$flavor;
+  runApp(const App());
+}
+''';
+
+    mainFile.writeAsStringSync(content);
+    print("✅ Created lib/main_$flavor.dart");
+  }
 }
 
 /// Updates `android/app/build.gradle`
