@@ -71,8 +71,11 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final router = locator<AppRouter>();
     return MaterialApp.router(
-      routerConfig: AppRouter().config(),
+      debugShowCheckedModeBanner: false,
+      title: "Flutter App",
+      routerConfig: router.config(),
     );
   }
 }
@@ -162,24 +165,20 @@ class $entryPage extends StatelessWidget {
 /// Runs `flutter pub get`
 Future<void> _runPubGet() async {
   print("📦 Running `flutter pub get`...");
-  ProcessResult result = await Process.run('flutter', ['pub', 'get']);
-  print(result.stdout);
+  Process.runSync('flutter', ['pub', 'get']);
   print("✅ Dependencies installed.");
 }
 
 /// Runs `flutter pub run build_runner build --delete-conflicting-outputs`
 Future<void> _runBuildRunner() async {
-  print(
-    "🔧 Running `flutter pub run build_runner build --delete-conflicting-outputs`...",
-  );
-  ProcessResult result = await Process.run('flutter', [
+  print("🔧 Running build_runner...");
+  Process.runSync('flutter', [
     'pub',
     'run',
     'build_runner',
     'build',
     '--delete-conflicting-outputs',
   ]);
-  print(result.stdout);
   print("✅ Code generation complete.");
 }
 
@@ -192,37 +191,30 @@ Future<void> _updatePubspec() async {
   }
 
   String pubspecContent = pubspecFile.readAsStringSync();
+  String dependencies = """
+dependencies:
+  auto_route: ^7.8.4
+  get_it: ^7.6.7
+  flutter_bloc: ^8.1.3
+""";
 
-  // Dependencies
-  List<String> dependencies = [
-    "auto_route: ^7.8.4",
-    "get_it: ^7.6.7",
-    "flutter_bloc: ^8.1.3",
-  ];
+  String devDependencies = """
+dev_dependencies:
+  auto_route_generator: ^8.0.0
+  build_runner: ^2.3.3
+  json_serializable: ^6.6.1
+  freezed: ^2.3.2
+""";
 
-  // Dev Dependencies
-  List<String> devDependencies = [
-    "auto_route_generator: ^8.0.0",
-    "build_runner: ^2.3.3",
-    "json_serializable: ^6.6.1",
-    "freezed: ^2.3.2",
-  ];
-
-  for (var dep in dependencies) {
-    if (!pubspecContent.contains(dep.split(":")[0])) {
-      pubspecContent += "\n  $dep";
-    }
+  if (!pubspecContent.contains("auto_route:")) {
+    pubspecContent += "\n$dependencies";
   }
-
-  pubspecContent += "\ndev_dependencies:";
-  for (var devDep in devDependencies) {
-    if (!pubspecContent.contains(devDep.split(":")[0])) {
-      pubspecContent += "\n  $devDep";
-    }
+  if (!pubspecContent.contains("auto_route_generator:")) {
+    pubspecContent += "\n$devDependencies";
   }
 
   pubspecFile.writeAsStringSync(pubspecContent);
-  print("✅ Updated pubspec.yaml with required dependencies.");
+  print("✅ Updated pubspec.yaml.");
 }
 
 /// Updates `config.dart`
@@ -271,17 +263,11 @@ Future<void> _updateAndroidFiles(
   List<String> flavors,
   Map<String, String> packageIds,
 ) async {
-  String gradlePath = "android/app/build.gradle";
-  File gradleFile = File(gradlePath);
-
-  if (!gradleFile.existsSync()) {
-    print("⚠️ build.gradle not found. Skipping Android setup.");
-    return;
-  }
-
+  File gradleFile = File("android/app/build.gradle");
+  if (!gradleFile.existsSync()) return;
   String gradleContent = gradleFile.readAsStringSync();
-  String flavorConfig = "flavorDimensions \"flavor\"\nproductFlavors {";
 
+  String flavorConfig = "flavorDimensions \"flavor\"\nproductFlavors {";
   for (var flavor in flavors) {
     flavorConfig += '''
       $flavor {
@@ -293,8 +279,7 @@ Future<void> _updateAndroidFiles(
   flavorConfig += "}";
 
   if (!gradleContent.contains("productFlavors")) {
-    gradleContent += "\n$flavorConfig";
-    gradleFile.writeAsStringSync(gradleContent);
+    gradleFile.writeAsStringSync(gradleContent + "\n$flavorConfig");
     print("✅ Modified android/app/build.gradle for flavors.");
   }
 }
