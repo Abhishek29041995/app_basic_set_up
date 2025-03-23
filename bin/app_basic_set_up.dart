@@ -3,11 +3,10 @@ import 'dart:io';
 void main() async {
   print("🚀 Welcome to Flutter App Setup CLI!");
 
-  stdout.write("Enter the name of your entry page (default: HomePage): ");
-  String entryPage = stdin.readLineSync()?.trim() ?? "HomePage";
-  if (entryPage.isEmpty) entryPage = "HomePage";
+  stdout.write("Enter the name of your entry page (default: Intro): ");
+  String entryPage = stdin.readLineSync()?.trim() ?? "Intro";
+  if (entryPage.isEmpty) entryPage = "Intro";
 
-  // Ask user if they want to use flavors
   stdout.write("Would you like to add flavors? (y/n): ");
   bool useFlavors = (stdin.readLineSync()?.trim().toLowerCase() == 'y');
 
@@ -38,10 +37,13 @@ void main() async {
 
   print("\n🛠 Generating project structure...\n");
 
+  await _updatePubspec();
+  await _runPubGet();
   await _generateAppFile();
   await _generateRouterFile(entryPage);
   await _generateLocatorFile();
   await _generatePresentationFiles(entryPage);
+  await _runBuildRunner();
 
   if (useFlavors) {
     await _updateConfigFile(flavors, baseUrls);
@@ -58,10 +60,9 @@ void main() async {
 
 /// Generates `lib/app.dart`
 Future<void> _generateAppFile() async {
-  File appFile = File("lib/app.dart");
   String content = '''
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:auto_route/auto_route.dart';
 import 'locator.dart';
 import 'router.dart';
 
@@ -70,24 +71,19 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
-      providers: [], // Add BLoC providers here
-      child: MaterialApp.router(
-        title: 'Flutter App',
-        debugShowCheckedModeBanner: false,
-        routerConfig: appRouter.config(),
-      ),
+    return MaterialApp.router(
+      routerConfig: AppRouter().config(),
     );
   }
 }
 ''';
-  appFile.writeAsStringSync(content);
+
+  File("lib/app.dart").writeAsStringSync(content);
   print("✅ Created lib/app.dart");
 }
 
 /// Generates `lib/router.dart`
 Future<void> _generateRouterFile(String entryPage) async {
-  File routerFile = File("lib/router.dart");
   String content = '''
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
@@ -99,83 +95,162 @@ part 'router.gr.dart';
 class AppRouter extends \$AppRouter {
   @override
   List<AutoRoute> get routes => [
-        AutoRoute(page: $entryPage, initial: true),
+        AutoRoute(page: $entryPage.page, initial: true),
       ];
 }
 
-final appRouter = AppRouter();
-''';
-  routerFile.writeAsStringSync(content);
-  print("✅ Created lib/router.dart");
-}
-
-/// Generates `lib/locator.dart`
-Future<void> _generateLocatorFile() async {
-  File locatorFile = File("lib/locator.dart");
-  String content = '''
-import 'package:get_it/get_it.dart';
-
-final GetIt locator = GetIt.instance;
-
-void setupLocator() {
-  // Register services, repositories, and BLoCs here
-}
-''';
-  locatorFile.writeAsStringSync(content);
-  print("✅ Created lib/locator.dart");
-}
-
-/// Generates `lib/presentation/pages/<entryPage>.dart`
-Future<void> _generatePresentationFiles(String entryPage) async {
-  Directory("lib/presentation/pages").createSync(recursive: true);
-
-  File entryPageFile = File("lib/presentation/pages/$entryPage.dart");
-  String content = '''
-import 'package:flutter/material.dart';
-
+@RoutePage()
 class $entryPage extends StatelessWidget {
   const $entryPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('$entryPage')),
-      body: const Center(child: Text('Welcome to $entryPage!')),
+      appBar: AppBar(title: const Text("$entryPage Page")),
+      body: const Center(child: Text("Welcome to $entryPage!")),
     );
   }
 }
 ''';
-  entryPageFile.writeAsStringSync(content);
+
+  File("lib/router.dart").writeAsStringSync(content);
+  print("✅ Created lib/router.dart");
+}
+
+/// Generates `lib/locator.dart`
+Future<void> _generateLocatorFile() async {
+  String content = '''
+import 'package:get_it/get_it.dart';
+
+final GetIt locator = GetIt.instance;
+
+void setupLocator() {
+  // Register services and repositories here
+}
+''';
+
+  File("lib/locator.dart").writeAsStringSync(content);
+  print("✅ Created lib/locator.dart");
+}
+
+/// Creates `presentation/pages` folder and entry page
+Future<void> _generatePresentationFiles(String entryPage) async {
+  Directory("lib/presentation/pages").createSync(recursive: true);
+
+  String content = '''
+import 'package:auto_route/auto_route.dart';
+import 'package:flutter/material.dart';
+
+@RoutePage()
+class $entryPage extends StatelessWidget {
+  const $entryPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("$entryPage Page")),
+      body: const Center(child: Text("Welcome to $entryPage!")),
+    );
+  }
+}
+''';
+
+  File("lib/presentation/pages/$entryPage.dart").writeAsStringSync(content);
   print("✅ Created lib/presentation/pages/$entryPage.dart");
 }
 
-/// Updates `lib/config.dart`
+/// Runs `flutter pub get`
+Future<void> _runPubGet() async {
+  print("📦 Running `flutter pub get`...");
+  ProcessResult result = await Process.run('flutter', ['pub', 'get']);
+  print(result.stdout);
+  print("✅ Dependencies installed.");
+}
+
+/// Runs `flutter pub run build_runner build --delete-conflicting-outputs`
+Future<void> _runBuildRunner() async {
+  print(
+    "🔧 Running `flutter pub run build_runner build --delete-conflicting-outputs`...",
+  );
+  ProcessResult result = await Process.run('flutter', [
+    'pub',
+    'run',
+    'build_runner',
+    'build',
+    '--delete-conflicting-outputs',
+  ]);
+  print(result.stdout);
+  print("✅ Code generation complete.");
+}
+
+/// Updates `pubspec.yaml`
+Future<void> _updatePubspec() async {
+  File pubspecFile = File("pubspec.yaml");
+  if (!pubspecFile.existsSync()) {
+    print("⚠️ pubspec.yaml not found. Skipping dependency installation.");
+    return;
+  }
+
+  String pubspecContent = pubspecFile.readAsStringSync();
+
+  // Dependencies
+  List<String> dependencies = [
+    "auto_route: ^7.8.4",
+    "get_it: ^7.6.7",
+    "flutter_bloc: ^8.1.3",
+  ];
+
+  // Dev Dependencies
+  List<String> devDependencies = [
+    "auto_route_generator: ^8.0.0",
+    "build_runner: ^2.3.3",
+    "json_serializable: ^6.6.1",
+    "freezed: ^2.3.2",
+  ];
+
+  for (var dep in dependencies) {
+    if (!pubspecContent.contains(dep.split(":")[0])) {
+      pubspecContent += "\n  $dep";
+    }
+  }
+
+  pubspecContent += "\ndev_dependencies:";
+  for (var devDep in devDependencies) {
+    if (!pubspecContent.contains(devDep.split(":")[0])) {
+      pubspecContent += "\n  $devDep";
+    }
+  }
+
+  pubspecFile.writeAsStringSync(pubspecContent);
+  print("✅ Updated pubspec.yaml with required dependencies.");
+}
+
+/// Updates `config.dart`
 Future<void> _updateConfigFile(
   List<String> flavors,
   Map<String, String> baseUrls,
 ) async {
-  File configFile = File("lib/config.dart");
   String content = '''
-enum Flavor { ${flavors.join(", ")} }
+enum Flavor { ${flavors.join(', ')} }
 
 class Config {
   static Flavor appFlavor = Flavor.${flavors.first};
 
   static String get baseUrl {
     switch (appFlavor) {
-      ${flavors.map((f) => 'case Flavor.$f: return "${baseUrls[f]}";').join("\n      ")}
+${flavors.map((f) => "      case Flavor.$f:\n        return '${baseUrls[f]}';").join('\n')}
     }
   }
 }
 ''';
-  configFile.writeAsStringSync(content);
-  print("✅ Updated lib/config.dart");
+
+  File("lib/config.dart").writeAsStringSync(content);
+  print("✅ Created lib/config.dart");
 }
 
-/// Generates `main_<flavor>.dart` files
+/// Generates `main_<flavor>.dart` for each flavor
 Future<void> _generateMainFiles(List<String> flavors) async {
   for (var flavor in flavors) {
-    File mainFile = File('lib/main_$flavor.dart');
     String content = '''
 import 'package:flutter/material.dart';
 import 'config.dart';
@@ -186,69 +261,67 @@ void main() {
   runApp(const App());
 }
 ''';
-    mainFile.writeAsStringSync(content);
+    File("lib/main_$flavor.dart").writeAsStringSync(content);
     print("✅ Created lib/main_$flavor.dart");
   }
 }
 
-/// Updates `android/app/build.gradle`
+/// Updates `android/app/build.gradle` for flavors
 Future<void> _updateAndroidFiles(
   List<String> flavors,
   Map<String, String> packageIds,
 ) async {
-  File gradleFile = File("android/app/build.gradle");
+  String gradlePath = "android/app/build.gradle";
+  File gradleFile = File(gradlePath);
+
   if (!gradleFile.existsSync()) {
-    print("⚠️ Android build.gradle not found. Skipping.");
+    print("⚠️ build.gradle not found. Skipping Android setup.");
     return;
   }
 
-  String flavorConfig = flavors
-      .map(
-        (f) => '''
-        $f {
-            applicationId "${packageIds[f]}"
-            dimension "flavor"
-        }''',
-      )
-      .join("\n");
+  String gradleContent = gradleFile.readAsStringSync();
+  String flavorConfig = "flavorDimensions \"flavor\"\nproductFlavors {";
 
-  String gradleContent = '''
-android {
-    flavorDimensions "flavor"
-    productFlavors {
-        $flavorConfig
-    }
-}
-''';
-  gradleFile.writeAsStringSync(gradleContent, mode: FileMode.append);
-  print("✅ Updated android/app/build.gradle");
+  for (var flavor in flavors) {
+    flavorConfig += '''
+      $flavor {
+        dimension "flavor"
+        applicationId "${packageIds[flavor]}"
+      }
+    ''';
+  }
+  flavorConfig += "}";
+
+  if (!gradleContent.contains("productFlavors")) {
+    gradleContent += "\n$flavorConfig";
+    gradleFile.writeAsStringSync(gradleContent);
+    print("✅ Modified android/app/build.gradle for flavors.");
+  }
 }
 
-/// Updates iOS Xcode configuration
+/// Updates `ios/Runner.xcodeproj/project.pbxproj` for flavors
 Future<void> _updateIOSFiles(
   List<String> flavors,
   Map<String, String> packageIds,
 ) async {
-  String iosProjectPath = "ios/Runner.xcodeproj/project.pbxproj";
-  File iosProjectFile = File(iosProjectPath);
-  if (!iosProjectFile.existsSync()) {
+  String iosPath = "ios/Runner.xcodeproj/project.pbxproj";
+  File iosFile = File(iosPath);
+
+  if (!iosFile.existsSync()) {
     print("⚠️ iOS project file not found. Skipping iOS setup.");
     return;
   }
 
-  String iosContent = iosProjectFile.readAsStringSync();
+  String iosContent = iosFile.readAsStringSync();
   for (var flavor in flavors) {
-    if (!iosContent.contains("XCBuildConfiguration = $flavor")) {
+    if (!iosContent.contains(flavor)) {
       iosContent += '''
-        XCBuildConfiguration = {
-          name = $flavor;
-          buildSettings = {
-            PRODUCT_BUNDLE_IDENTIFIER = ${packageIds[flavor]};
-          };
-        };
+        $flavor {
+          PRODUCT_BUNDLE_IDENTIFIER = ${packageIds[flavor]};
+        }
       ''';
     }
   }
-  iosProjectFile.writeAsStringSync(iosContent);
+  iosFile.writeAsStringSync(iosContent);
   print("✅ Updated iOS Xcode project for flavors.");
 }
