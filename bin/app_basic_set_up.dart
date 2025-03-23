@@ -192,14 +192,14 @@ Future<void> _updatePubspec() async {
 
   List<String> lines = pubspecFile.readAsLinesSync();
   List<String> updatedLines = [];
-
+  
   bool inDependencies = false, inDevDependencies = false;
   bool dependenciesUpdated = false, devDependenciesUpdated = false;
   bool inFlutterSection = false;
 
-  // New dependencies to add
-  Map<String, String> newDependencies = {
-    "auto_route": "^7.8.4",
+  // New dependencies to add (auto_route without a version)
+  Map<String, String?> newDependencies = {
+    "auto_route": null, // No version specified
     "get_it": "^7.6.7",
     "flutter_bloc": "^8.1.3",
   };
@@ -233,8 +233,7 @@ Future<void> _updatePubspec() async {
       inDependencies = false;
       inDevDependencies = false;
       inFlutterSection = true;
-    } else if (trimmed.isNotEmpty &&
-        !trimmed.startsWith(RegExp(r'[a-zA-Z_]'))) {
+    } else if (trimmed.isNotEmpty && !trimmed.startsWith(RegExp(r'[a-zA-Z_]'))) {
       // Not a dependency line
       inDependencies = false;
       inDevDependencies = false;
@@ -265,7 +264,11 @@ Future<void> _updatePubspec() async {
     if (line.trim().startsWith("dependencies:")) {
       for (var entry in newDependencies.entries) {
         if (!existingDependencies.contains(entry.key)) {
-          finalLines.add("  ${entry.key}: ${entry.value}");
+          if (entry.value == null) {
+            finalLines.add("  ${entry.key}:"); // No version
+          } else {
+            finalLines.add("  ${entry.key}: ${entry.value}");
+          }
         }
       }
     } else if (line.trim().startsWith("dev_dependencies:")) {
