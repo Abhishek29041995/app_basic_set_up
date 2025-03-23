@@ -190,31 +190,66 @@ Future<void> _updatePubspec() async {
     return;
   }
 
-  String pubspecContent = pubspecFile.readAsStringSync();
-  String dependencies = """
-dependencies:
-  auto_route: ^7.8.4
-  get_it: ^7.6.7
-  flutter_bloc: ^8.1.3
-""";
+  List<String> lines = pubspecFile.readAsLinesSync();
+  bool inDependencies = false, inDevDependencies = false;
+  Set<String> existingDependencies = {}, existingDevDependencies = {};
 
-  String devDependencies = """
-dev_dependencies:
-  auto_route_generator: ^8.0.0
-  build_runner: ^2.3.3
-  json_serializable: ^6.6.1
-  freezed: ^2.3.2
-""";
+  for (String line in lines) {
+    if (line.trim().startsWith("dependencies:")) {
+      inDependencies = true;
+      inDevDependencies = false;
+    } else if (line.trim().startsWith("dev_dependencies:")) {
+      inDependencies = false;
+      inDevDependencies = true;
+    } else if (line.trim().startsWith(RegExp(r'[a-zA-Z]'))) {
+      inDependencies = false;
+      inDevDependencies = false;
+    }
 
-  if (!pubspecContent.contains("auto_route:")) {
-    pubspecContent += "\n$dependencies";
-  }
-  if (!pubspecContent.contains("auto_route_generator:")) {
-    pubspecContent += "\n$devDependencies";
+    if (inDependencies || inDevDependencies) {
+      existingDependencies.add(line.split(":").first.trim());
+    }
   }
 
-  pubspecFile.writeAsStringSync(pubspecContent);
-  print("✅ Updated pubspec.yaml.");
+  Map<String, String> newDependencies = {
+    "auto_route": "^7.8.4",
+    "get_it": "^7.6.7",
+    "flutter_bloc": "^8.1.3",
+  };
+
+  Map<String, String> newDevDependencies = {
+    "auto_route_generator": "^8.0.0",
+    "build_runner": "^2.3.3",
+    "json_serializable": "^6.6.1",
+    "freezed": "^2.3.2",
+  };
+
+  // Append missing dependencies
+  List<String> modifiedLines = List.from(lines);
+  bool addedDependencies = false, addedDevDependencies = false;
+
+  for (var entry in newDependencies.entries) {
+    if (!existingDependencies.contains(entry.key)) {
+      if (!addedDependencies) {
+        modifiedLines.add("\ndependencies:");
+        addedDependencies = true;
+      }
+      modifiedLines.add("  ${entry.key}: ${entry.value}");
+    }
+  }
+
+  for (var entry in newDevDependencies.entries) {
+    if (!existingDevDependencies.contains(entry.key)) {
+      if (!addedDevDependencies) {
+        modifiedLines.add("\ndev_dependencies:");
+        addedDevDependencies = true;
+      }
+      modifiedLines.add("  ${entry.key}: ${entry.value}");
+    }
+  }
+
+  pubspecFile.writeAsStringSync(modifiedLines.join("\n"));
+  print("✅ Updated pubspec.yaml without duplicates.");
 }
 
 /// Updates `config.dart`
