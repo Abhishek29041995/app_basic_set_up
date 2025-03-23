@@ -191,32 +191,19 @@ Future<void> _updatePubspec() async {
   }
 
   List<String> lines = pubspecFile.readAsLinesSync();
+  List<String> updatedLines = [];
+
   bool inDependencies = false, inDevDependencies = false;
-  Set<String> existingDependencies = {}, existingDevDependencies = {};
+  bool dependenciesUpdated = false, devDependenciesUpdated = false;
 
-  for (String line in lines) {
-    if (line.trim().startsWith("dependencies:")) {
-      inDependencies = true;
-      inDevDependencies = false;
-    } else if (line.trim().startsWith("dev_dependencies:")) {
-      inDependencies = false;
-      inDevDependencies = true;
-    } else if (line.trim().startsWith(RegExp(r'[a-zA-Z]'))) {
-      inDependencies = false;
-      inDevDependencies = false;
-    }
-
-    if (inDependencies || inDevDependencies) {
-      existingDependencies.add(line.split(":").first.trim());
-    }
-  }
-
+  // New dependencies to add
   Map<String, String> newDependencies = {
     "auto_route": "^7.8.4",
     "get_it": "^7.6.7",
     "flutter_bloc": "^8.1.3",
   };
 
+  // New dev_dependencies to add
   Map<String, String> newDevDependencies = {
     "auto_route_generator": "^8.0.0",
     "build_runner": "^2.3.3",
@@ -224,32 +211,74 @@ Future<void> _updatePubspec() async {
     "freezed": "^2.3.2",
   };
 
-  // Append missing dependencies
-  List<String> modifiedLines = List.from(lines);
-  bool addedDependencies = false, addedDevDependencies = false;
+  // Track which dependencies exist
+  Set<String> existingDependencies = {};
+  Set<String> existingDevDependencies = {};
 
-  for (var entry in newDependencies.entries) {
-    if (!existingDependencies.contains(entry.key)) {
-      if (!addedDependencies) {
-        modifiedLines.add("\ndependencies:");
-        addedDependencies = true;
+  for (String line in lines) {
+    String trimmed = line.trim();
+
+    if (trimmed.startsWith("dependencies:")) {
+      inDependencies = true;
+      inDevDependencies = false;
+      dependenciesUpdated = true;
+    } else if (trimmed.startsWith("dev_dependencies:")) {
+      inDependencies = false;
+      inDevDependencies = true;
+      devDependenciesUpdated = true;
+    } else if (trimmed.isNotEmpty &&
+        !trimmed.startsWith(RegExp(r'[a-zA-Z_]'))) {
+      // Not a dependency line
+      inDependencies = false;
+      inDevDependencies = false;
+    }
+
+    // Collect existing dependencies
+    if (inDependencies || inDevDependencies) {
+      List<String> parts = trimmed.split(":");
+      if (parts.length > 1) {
+        String key = parts[0].trim();
+        if (inDependencies) {
+          existingDependencies.add(key);
+        } else if (inDevDependencies) {
+          existingDevDependencies.add(key);
+        }
       }
-      modifiedLines.add("  ${entry.key}: ${entry.value}");
+    }
+
+    updatedLines.add(line);
+  }
+
+  // Append missing dependencies to the correct section
+  if (dependenciesUpdated) {
+    for (var entry in newDependencies.entries) {
+      if (!existingDependencies.contains(entry.key)) {
+        updatedLines.add("  ${entry.key}: ${entry.value}");
+      }
+    }
+  } else {
+    updatedLines.add("\ndependencies:");
+    for (var entry in newDependencies.entries) {
+      updatedLines.add("  ${entry.key}: ${entry.value}");
     }
   }
 
-  for (var entry in newDevDependencies.entries) {
-    if (!existingDevDependencies.contains(entry.key)) {
-      if (!addedDevDependencies) {
-        modifiedLines.add("\ndev_dependencies:");
-        addedDevDependencies = true;
+  if (devDependenciesUpdated) {
+    for (var entry in newDevDependencies.entries) {
+      if (!existingDevDependencies.contains(entry.key)) {
+        updatedLines.add("  ${entry.key}: ${entry.value}");
       }
-      modifiedLines.add("  ${entry.key}: ${entry.value}");
+    }
+  } else {
+    updatedLines.add("\ndev_dependencies:");
+    for (var entry in newDevDependencies.entries) {
+      updatedLines.add("  ${entry.key}: ${entry.value}");
     }
   }
 
-  pubspecFile.writeAsStringSync(modifiedLines.join("\n"));
-  print("✅ Updated pubspec.yaml without duplicates.");
+  // Write back the modified content
+  pubspecFile.writeAsStringSync(updatedLines.join("\n"));
+  print("✅ Successfully updated pubspec.yaml without duplicates.");
 }
 
 /// Updates `config.dart`
