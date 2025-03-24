@@ -3,9 +3,15 @@ import 'dart:io';
 void main() async {
   print("🚀 Welcome to Flutter App Setup CLI!");
 
-  stdout.write("Enter the name of your entry page (default: Intro): ");
-  String entryPage = stdin.readLineSync()?.trim() ?? "Intro";
-  if (entryPage.isEmpty) entryPage = "Intro";
+  stdout.write("Enter the name of your entry page (default: intro): ");
+  String entryPageInput = stdin.readLineSync()?.trim().toLowerCase() ?? "intro";
+  if (entryPageInput.isEmpty) entryPageInput = "intro";
+
+  // Convert to proper naming format for class
+  String entryPageClass = _toPascalCase(entryPageInput);
+  // For file and folder names, use snake case
+  String entryPageFileName = "${entryPageInput}_page.dart";
+  String entryPageFolder = entryPageInput;
 
   stdout.write("Would you like to add flavors? (y/n): ");
   bool useFlavors = (stdin.readLineSync()?.trim().toLowerCase() == 'y');
@@ -17,7 +23,9 @@ void main() async {
   if (useFlavors) {
     stdout.write("Enter flavors (comma-separated, e.g., dev,uat,prod): ");
     String? flavorsInput = stdin.readLineSync();
-    flavors = flavorsInput?.split(",").map((e) => e.trim()).toList() ?? [];
+    flavors =
+        flavorsInput?.split(",").map((e) => e.trim().toLowerCase()).toList() ??
+        [];
 
     if (flavors.isEmpty) {
       print("⚠️ No flavors provided. Exiting.");
@@ -35,14 +43,22 @@ void main() async {
     }
   }
 
+  stdout.write("Would you like to add VSCode configuration files? (y/n): ");
+  bool addVSCodeConfig = (stdin.readLineSync()?.trim().toLowerCase() == 'y');
+
   print("\n🛠 Generating project structure...\n");
 
   await _updatePubspec();
   await _runPubGet();
   await _generateAppFile();
-  await _generateRouterFile(entryPage);
+  await _generateRouterFile(entryPageClass, entryPageFolder, entryPageFileName);
   await _generateLocatorFile();
-  await _generatePresentationFiles(entryPage);
+  await _generatePresentationFiles(
+    entryPageClass,
+    entryPageFolder,
+    entryPageFileName,
+  );
+  await _createAnalysisOptions();
   await _runBuildRunner();
 
   if (useFlavors) {
@@ -52,10 +68,345 @@ void main() async {
     await _updateIOSFiles(flavors, packageIds);
   }
 
+  if (addVSCodeConfig) {
+    await _createVSCodeFiles(flavors);
+  }
+
   print(
     "\n🎉 Setup Complete! Run `flutter run ${useFlavors ? '--flavor <flavor>' : ''}` to test.",
   );
   print("🤝 Happy coding! Hope this setup makes your development smoother.");
+}
+
+/// Converts a string to PascalCase
+String _toPascalCase(String input) {
+  if (input.isEmpty) return '';
+  return input
+      .split('_')
+      .map(
+        (word) =>
+            word.isEmpty
+                ? ''
+                : word[0].toUpperCase() + word.substring(1).toLowerCase(),
+      )
+      .join('');
+}
+
+/// Create analysis_options.yaml with code quality rules
+Future<void> _createAnalysisOptions() async {
+  String content = '''
+# This file configures the analyzer, which statically analyzes Dart code to
+# check for errors, warnings, and lints.
+#
+# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
+# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
+# invoked from the command line by running `flutter analyze`.
+# The following line activates a set of recommended lints for Flutter apps,
+# packages, and plugins designed to encourage good coding practices.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - "**/*.gr.dart"
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+  errors:
+    invalid_annotation_target: ignore
+
+linter:
+  rules:
+    - always_declare_return_types
+    - always_require_non_null_named_parameters
+    - annotate_overrides
+    - avoid_bool_literals_in_conditional_expressions
+    - avoid_empty_else
+    - avoid_print
+    - avoid_unnecessary_containers
+    - avoid_unused_constructor_parameters
+    - avoid_void_async
+    - await_only_futures
+    - camel_case_types
+    - cancel_subscriptions
+    - constant_identifier_names
+    - curly_braces_in_flow_control_structures
+    - directives_ordering
+    - empty_catches
+    - empty_constructor_bodies
+    - file_names
+    - implementation_imports
+    - library_names
+    - library_prefixes
+    - list_remove_unrelated_type
+    - no_leading_underscores_for_local_identifiers
+    - non_constant_identifier_names
+    - overridden_fields
+    - package_api_docs
+    - package_names
+    - prefer_const_constructors
+    - prefer_const_constructors_in_immutables
+    - prefer_const_declarations
+    - prefer_final_fields
+    - prefer_initializing_formals
+    - prefer_is_not_empty
+    - prefer_single_quotes
+    - prefer_typing_uninitialized_variables
+    - require_trailing_commas
+    - sized_box_for_whitespace
+    - sort_child_properties_last
+    - type_init_formals
+    - unawaited_futures
+    - unnecessary_brace_in_string_interps
+    - unnecessary_const
+    - unnecessary_getters_setters
+    - unnecessary_new
+    - unnecessary_null_aware_assignments
+    - unnecessary_null_in_if_null_operators
+    - unnecessary_string_escapes
+    - unnecessary_string_interpolations
+    - unnecessary_this
+    - use_build_context_synchronously
+    - use_full_hex_values_for_flutter_colors
+    - use_key_in_widget_constructors
+    - use_rethrow_when_possible
+    - valid_regexps
+
+dart_code_metrics:
+  anti-patterns:
+    - long-method:
+        exclude:
+          - "**/*_bloc.dart"
+          - "**/value_transformers.dart"
+    - long-parameter-list
+  metrics:
+    cyclomatic-complexity: 30
+    maximum-nesting-level: 6
+    number-of-parameters: 20
+    source-lines-of-code: 62
+  metrics-exclude:
+    # - test/**
+    # - integration_test/**
+    - lib/core/di/locator.dart
+  rules:
+    - newline-before-return
+    - no-boolean-literal-compare
+    - no-empty-block
+    - prefer-trailing-comma
+    - prefer-conditional-expressions
+    - no-equal-then-else
+    - avoid-shrink-wrap-in-lists
+    - avoid-unnecessary-setstate
+    - always-remove-listener
+    - avoid-expanded-as-spacer
+    - prefer-correct-edge-insets-constructor
+    - avoid-returning-widgets
+''';
+
+  File("analysis_options.yaml").writeAsStringSync(content);
+
+  // Add flutter_lints to dev_dependencies if it's not already there
+  await _addFlutterLintsDependency();
+
+  print("✅ Created analysis_options.yaml with code quality rules");
+}
+
+/// Add flutter_lints to dev_dependencies
+Future<void> _addFlutterLintsDependency() async {
+  File pubspecFile = File("pubspec.yaml");
+  if (!pubspecFile.existsSync()) return;
+
+  String content = pubspecFile.readAsStringSync();
+  if (!content.contains("flutter_lints")) {
+    List<String> lines = content.split("\n");
+    int devDepsIndex = lines.indexWhere(
+      (line) => line.trim() == "dev_dependencies:",
+    );
+
+    if (devDepsIndex != -1) {
+      // Find the position to insert the dependency
+      int insertIndex = devDepsIndex + 1;
+      while (insertIndex < lines.length &&
+          (lines[insertIndex].trim().isEmpty ||
+              lines[insertIndex].startsWith("  "))) {
+        insertIndex++;
+      }
+
+      lines.insert(insertIndex, "  flutter_lints: ^2.0.0");
+      pubspecFile.writeAsStringSync(lines.join("\n"));
+    }
+  }
+}
+
+/// Create VSCode settings.json and launch.json files
+Future<void> _createVSCodeFiles(List<String> flavors) async {
+  Directory(".vscode").createSync(recursive: true);
+
+  // Create settings.json
+  String settingsContent = '''
+{
+  "git.autofetch": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.dcm.fixAll": "explicit"
+  },
+  "[plist]": {
+    "editor.formatOnSave": true
+  },
+  "debug.openDebug": "openOnDebugBreak",
+  "debug.internalConsoleOptions": "openOnSessionStart",
+  "debug.toolBarLocation": "commandCenter",
+  "dart.previewFlutterUiGuidesCustomTracking": true,
+  "dart.previewFlutterUiGuides": true,
+  "dart.devToolsLocation": "external",
+  "dart.runPubGetOnPubspecChanges": "prompt",
+  "dart.flutterSdkPath": ".fvm/versions/3.29.2",
+  "dart.sdkPath": ".fvm/flutter_sdk/bin/dart",
+  "[dart]": {
+    "editor.formatOnType": true,
+    "editor.formatOnSave": true,
+    "editor.rulers": [
+      80
+    ],
+    "editor.selectionHighlight": false,
+    "editor.suggest.snippetsPreventQuickSuggestions": false,
+    "editor.suggestSelection": "first",
+    "editor.tabCompletion": "onlySnippets",
+    "editor.wordBasedSuggestions": "off",
+    "editor.guides.indentation": true,
+    "editor.defaultFormatter": "Dart-Code.dart-code"
+  },
+  "search.exclude": {
+    "**/.fvm": true
+  },
+  "files.watcherExclude": {
+    "**/.fvm": true
+  },
+  "files.exclude": {
+    "**/*.freezed.dart": true,
+    "**/*.g.dart": true,
+    "**/*.gr.dart": true
+  },
+  "[csv]": {
+    "files.eol": "\\r\\n"
+  },
+  "flutter-coverage.coverageFileNames": [
+    "lcov.info",
+    "cov.xml",
+    "coverage.xml",
+    "jacoco.xml"
+  ]
+}
+''';
+
+  // Build launch configurations based on flavors
+  List<String> launchConfigurations = [];
+
+  // Always add default Flutter configuration
+  launchConfigurations.add('''
+    {
+      "name": "Flutter",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "flutterMode": "profile"
+    }''');
+
+  // Add flavor-specific configurations
+  if (flavors.isNotEmpty) {
+    for (var flavor in flavors) {
+      launchConfigurations.add('''
+    {
+      "name": "$flavor",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_$flavor.dart",
+      "args": ["--flavor", "$flavor"]
+    }''');
+    }
+
+    // Add profile and release configs for the first flavor
+    String mainFlavor = flavors.first;
+    launchConfigurations.add('''
+    {
+      "name": "$mainFlavor-profile",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile",
+      "program": "lib/main_$mainFlavor.dart",
+      "args": ["--flavor", "$mainFlavor"]
+    }''');
+
+    launchConfigurations.add('''
+    {
+      "name": "$mainFlavor-release",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_$mainFlavor.dart",
+      "args": ["--flavor", "$mainFlavor", "--release"]
+    }''');
+  }
+
+  // Build compound configurations if needed
+  List<String> compoundConfigs = [];
+  if (flavors.length >= 2) {
+    List<String> deviceConfigs = [];
+
+    // Create device-specific configs first
+    for (var flavor in flavors.take(2)) {
+      String androidConfig = '''
+    {
+      "name": "$flavor-android",
+      "request": "launch",
+      "deviceId": "emulator-5554",
+      "type": "dart",
+      "program": "lib/main_$flavor.dart",
+      "args": ["--flavor", "$flavor"]
+    }''';
+
+      String iosConfig = '''
+    {
+      "name": "$flavor-ios",
+      "request": "launch",
+      "deviceId": "apple_ios_simulator",
+      "type": "dart",
+      "program": "lib/main_$flavor.dart",
+      "args": ["--flavor", "$flavor"]
+    }''';
+
+      launchConfigurations.add(androidConfig);
+      launchConfigurations.add(iosConfig);
+
+      deviceConfigs.add('"$flavor-android"');
+      deviceConfigs.add('"$flavor-ios"');
+    }
+
+    // Create compound config
+    compoundConfigs.add('''
+    {
+      "name": "all-devices",
+      "configurations": [${deviceConfigs.join(', ')}]
+    }''');
+  }
+
+  String launchJson = '''
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "dart.flutterSdkPath": ".fvm/flutter_sdk",
+  "dart.sdkPath": ".fvm/flutter_sdk/bin/dart",
+  "configurations": [
+${launchConfigurations.join(',\n')}
+  ]${compoundConfigs.isNotEmpty ? ',\n  "compounds": [\n${compoundConfigs.join(',\n')}\n  ]' : ''}
+}
+''';
+
+  File(".vscode/settings.json").writeAsStringSync(settingsContent);
+  File(".vscode/launch.json").writeAsStringSync(launchJson);
+
+  print("✅ Created VSCode configuration files:");
+  print("  • .vscode/settings.json");
+  print("  • .vscode/launch.json");
 }
 
 /// Generates `lib/app.dart`
@@ -63,8 +414,9 @@ Future<void> _generateAppFile() async {
   String content = '''
 import 'package:flutter/material.dart';
 import 'package:auto_route/auto_route.dart';
-import 'locator.dart';
-import 'router.dart';
+import 'core/di/locator.dart';
+import 'core/router/router.dart';
+import 'core/config/config.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -74,23 +426,34 @@ class App extends StatelessWidget {
     final router = locator<AppRouter>();
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
-      title: "Flutter App",
-      routerConfig: router.config(),
+      title: locator<Config>().appName,
+      routerDelegate: AutoRouterDelegate(
+        router,
+      ),
+      routeInformationParser: router.defaultRouteParser(),
     );
   }
 }
 ''';
 
+  Directory("lib/core/config").createSync(recursive: true);
+  Directory("lib/core/router").createSync(recursive: true);
+  Directory("lib/core/di").createSync(recursive: true);
+
   File("lib/app.dart").writeAsStringSync(content);
   print("✅ Created lib/app.dart");
 }
 
-/// Generates `lib/router.dart`
-Future<void> _generateRouterFile(String entryPage) async {
+/// Generates `lib/core/router/router.dart`
+Future<void> _generateRouterFile(
+  String entryPageClass,
+  String entryPageFolder,
+  String entryPageFileName,
+) async {
   String content = '''
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
-import 'presentation/pages/$entryPage.dart';
+import '../../presentation/screens/$entryPageFolder/$entryPageFileName';
 
 part 'router.gr.dart';
 
@@ -98,68 +461,73 @@ part 'router.gr.dart';
 class AppRouter extends \$AppRouter {
   @override
   List<AutoRoute> get routes => [
-        AutoRoute(page: $entryPage.page, initial: true),
+        AutoRoute(page: ${entryPageClass}Page.page, initial: true),
       ];
-}
-
-@RoutePage()
-class $entryPage extends StatelessWidget {
-  const $entryPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("$entryPage Page")),
-      body: const Center(child: Text("Welcome to $entryPage!")),
-    );
-  }
 }
 ''';
 
-  File("lib/router.dart").writeAsStringSync(content);
-  print("✅ Created lib/router.dart");
+  File("lib/core/router/router.dart").writeAsStringSync(content);
+  print("✅ Created lib/core/router/router.dart");
 }
 
-/// Generates `lib/locator.dart`
+/// Generates `lib/core/di/locator.dart`
 Future<void> _generateLocatorFile() async {
   String content = '''
 import 'package:get_it/get_it.dart';
+import '../router/router.dart';
+import '../config/config.dart';
 
 final GetIt locator = GetIt.instance;
 
 void setupLocator() {
+  // Register router
+  locator.registerSingleton<AppRouter>(AppRouter());
+  
+  // Register config
+  locator.registerSingleton<Config>(Config());
+  
   // Register services and repositories here
 }
 ''';
 
-  File("lib/locator.dart").writeAsStringSync(content);
-  print("✅ Created lib/locator.dart");
+  File("lib/core/di/locator.dart").writeAsStringSync(content);
+  print("✅ Created lib/core/di/locator.dart");
 }
 
-/// Creates `presentation/pages` folder and entry page
-Future<void> _generatePresentationFiles(String entryPage) async {
-  Directory("lib/presentation/pages").createSync(recursive: true);
+/// Creates presentation structure and entry page
+Future<void> _generatePresentationFiles(
+  String entryPageClass,
+  String entryPageFolder,
+  String entryPageFileName,
+) async {
+  Directory(
+    "lib/presentation/screens/$entryPageFolder",
+  ).createSync(recursive: true);
 
   String content = '''
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 
 @RoutePage()
-class $entryPage extends StatelessWidget {
-  const $entryPage({super.key});
+class ${entryPageClass}Page extends StatelessWidget {
+  const ${entryPageClass}Page({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("$entryPage Page")),
-      body: const Center(child: Text("Welcome to $entryPage!")),
+      appBar: AppBar(title: const Text('${entryPageClass} Page')),
+      body: const Center(child: Text('Welcome to ${entryPageClass}!')),
     );
   }
 }
 ''';
 
-  File("lib/presentation/pages/$entryPage.dart").writeAsStringSync(content);
-  print("✅ Created lib/presentation/pages/$entryPage.dart");
+  File(
+    "lib/presentation/screens/$entryPageFolder/$entryPageFileName",
+  ).writeAsStringSync(content);
+  print(
+    "✅ Created lib/presentation/screens/$entryPageFolder/$entryPageFileName",
+  );
 }
 
 /// Runs `flutter pub get`
@@ -192,7 +560,7 @@ Future<void> _updatePubspec() async {
 
   List<String> lines = pubspecFile.readAsLinesSync();
   List<String> updatedLines = [];
-  
+
   bool inDependencies = false, inDevDependencies = false;
   bool dependenciesUpdated = false, devDependenciesUpdated = false;
   bool inFlutterSection = false;
@@ -202,6 +570,8 @@ Future<void> _updatePubspec() async {
     "auto_route": null, // No version specified
     "get_it": "^7.6.7",
     "flutter_bloc": "^8.1.3",
+    "equatable": "^2.0.5",
+    "dio": "^5.3.2",
   };
 
   // New dev_dependencies to add
@@ -210,6 +580,8 @@ Future<void> _updatePubspec() async {
     "build_runner": "^2.3.3",
     "json_serializable": "^6.6.1",
     "freezed": "^2.3.2",
+    "flutter_lints": "^2.0.0",
+    "dart_code_metrics": "^5.7.6",
   };
 
   // Track existing dependencies
@@ -233,7 +605,8 @@ Future<void> _updatePubspec() async {
       inDependencies = false;
       inDevDependencies = false;
       inFlutterSection = true;
-    } else if (trimmed.isNotEmpty && !trimmed.startsWith(RegExp(r'[a-zA-Z_]'))) {
+    } else if (trimmed.isNotEmpty &&
+        !trimmed.startsWith(RegExp(r'[a-zA-Z_]'))) {
       // Not a dependency line
       inDependencies = false;
       inDevDependencies = false;
@@ -285,7 +658,7 @@ Future<void> _updatePubspec() async {
   print("✅ Successfully updated pubspec.yaml without duplicates.");
 }
 
-/// Updates `config.dart`
+/// Updates `lib/core/config/config.dart`
 Future<void> _updateConfigFile(
   List<String> flavors,
   Map<String, String> baseUrls,
@@ -295,8 +668,12 @@ enum Flavor { ${flavors.join(', ')} }
 
 class Config {
   static Flavor appFlavor = Flavor.${flavors.first};
+  
+  String get appName => 'Flutter App (\${_flavorName})';
+  
+  String get _flavorName => appFlavor.toString().split('.').last;
 
-  static String get baseUrl {
+  String get baseUrl {
     switch (appFlavor) {
 ${flavors.map((f) => "      case Flavor.$f:\n        return '${baseUrls[f]}';").join('\n')}
     }
@@ -304,20 +681,38 @@ ${flavors.map((f) => "      case Flavor.$f:\n        return '${baseUrls[f]}';").
 }
 ''';
 
-  File("lib/config.dart").writeAsStringSync(content);
-  print("✅ Created lib/config.dart");
+  File("lib/core/config/config.dart").writeAsStringSync(content);
+  print("✅ Created lib/core/config/config.dart");
 }
 
 /// Generates `main_<flavor>.dart` for each flavor
 Future<void> _generateMainFiles(List<String> flavors) async {
+  String mainContent = '''
+import 'package:flutter/material.dart';
+import 'core/config/config.dart';
+import 'core/di/locator.dart';
+import 'app.dart';
+
+void main() {
+  setupLocator();
+  runApp(const App());
+}
+''';
+
+  // Create regular main.dart
+  File("lib/main.dart").writeAsStringSync(mainContent);
+  print("✅ Created lib/main.dart");
+
   for (var flavor in flavors) {
     String content = '''
 import 'package:flutter/material.dart';
-import 'config.dart';
+import 'core/config/config.dart';
+import 'core/di/locator.dart';
 import 'app.dart';
 
 void main() {
   Config.appFlavor = Flavor.$flavor;
+  setupLocator();
   runApp(const App());
 }
 ''';
@@ -335,19 +730,27 @@ Future<void> _updateAndroidFiles(
   if (!gradleFile.existsSync()) return;
   String gradleContent = gradleFile.readAsStringSync();
 
-  String flavorConfig = "flavorDimensions \"flavor\"\nproductFlavors {";
+  String flavorConfig = "    flavorDimensions \"flavor\"\n    productFlavors {";
   for (var flavor in flavors) {
     flavorConfig += '''
-      $flavor {
-        dimension "flavor"
-        applicationId "${packageIds[flavor]}"
-      }
+        $flavor {
+            dimension "flavor"
+            applicationId "${packageIds[flavor]}"
+            resValue "string", "app_name", "Flutter App $flavor"
+        }
     ''';
   }
-  flavorConfig += "}";
+  flavorConfig += "    }";
 
   if (!gradleContent.contains("productFlavors")) {
-    gradleFile.writeAsStringSync(gradleContent + "\n$flavorConfig");
+    // Find the right position to insert the flavor configuration
+    int index = gradleContent.indexOf("android {") + "android {".length;
+    String updatedContent =
+        gradleContent.substring(0, index) +
+        "\n$flavorConfig\n" +
+        gradleContent.substring(index);
+
+    gradleFile.writeAsStringSync(updatedContent);
     print("✅ Modified android/app/build.gradle for flavors.");
   }
 }
@@ -357,24 +760,29 @@ Future<void> _updateIOSFiles(
   List<String> flavors,
   Map<String, String> packageIds,
 ) async {
-  String iosPath = "ios/Runner.xcodeproj/project.pbxproj";
-  File iosFile = File(iosPath);
+  print("⚠️ iOS flavor setup requires manual configuration.");
+  print("ℹ️ Please follow these steps for iOS setup:");
+  print("  1. Open iOS/Runner.xcodeproj in Xcode");
+  print("  2. Go to Runner target > Build Settings");
+  print("  3. Add User-Defined settings for each flavor:");
 
-  if (!iosFile.existsSync()) {
-    print("⚠️ iOS project file not found. Skipping iOS setup.");
-    return;
-  }
-
-  String iosContent = iosFile.readAsStringSync();
   for (var flavor in flavors) {
-    if (!iosContent.contains(flavor)) {
-      iosContent += '''
-        $flavor {
-          PRODUCT_BUNDLE_IDENTIFIER = ${packageIds[flavor]};
-        }
-      ''';
-    }
+    print("     - For $flavor:");
+    print("       • PRODUCT_BUNDLE_IDENTIFIER = ${packageIds[flavor]}");
   }
-  iosFile.writeAsStringSync(iosContent);
-  print("✅ Updated iOS Xcode project for flavors.");
+
+  // Create iOS flavor configurations helper file
+  Directory("ios/Flutter/flavors").createSync(recursive: true);
+
+  for (var flavor in flavors) {
+    String content = '''
+// Generated file - do not edit
+#include "Flutter/Generated.xcconfig"
+PRODUCT_BUNDLE_IDENTIFIER=${packageIds[flavor]};
+FLUTTER_TARGET=lib/main_$flavor.dart;
+''';
+    File("ios/Flutter/flavors/$flavor.xcconfig").writeAsStringSync(content);
+  }
+
+  print("✅ Created iOS flavor configuration files in ios/Flutter/flavors/");
 }
