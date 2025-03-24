@@ -3,6 +3,12 @@ import 'dart:io';
 void main() async {
   print("🚀 Welcome to Flutter App Setup CLI!");
 
+  // Check for FVM installation first
+  bool fvmInstalled = await _checkFvmInstallation();
+  if (!fvmInstalled) {
+    await _handleFvmInstallation();
+  }
+
   stdout.write("Enter the name of your entry page (default: intro): ");
   String entryPageInput = stdin.readLineSync()?.trim().toLowerCase() ?? "intro";
   if (entryPageInput.isEmpty) entryPageInput = "intro";
@@ -18,7 +24,7 @@ void main() async {
 
   List<String> flavors = [];
   Map<String, String> baseUrls = {};
-  Map<String, String> packageIds = {};
+  String baseBundleId = "";
 
   if (useFlavors) {
     stdout.write("Enter flavors (comma-separated, e.g., dev,uat,prod): ");
@@ -32,14 +38,13 @@ void main() async {
       return;
     }
 
+    // Get base bundle ID once
+    stdout.write("Enter base Bundle ID (e.g., com.example.app): ");
+    baseBundleId = stdin.readLineSync()?.trim() ?? "com.example.app";
+
     for (var flavor in flavors) {
       stdout.write("Enter Base URL for $flavor: ");
       baseUrls[flavor] = stdin.readLineSync() ?? "";
-
-      stdout.write(
-        "Enter Bundle ID for $flavor (e.g., com.example.app.$flavor): ",
-      );
-      packageIds[flavor] = stdin.readLineSync() ?? "";
     }
   }
 
@@ -62,6 +67,15 @@ void main() async {
   await _runBuildRunner();
 
   if (useFlavors) {
+    // Generate package IDs based on the base bundle ID
+    Map<String, String> packageIds = {};
+    for (var flavor in flavors) {
+      // For prod, use the base bundle ID as is; for others, append the flavor
+      packageIds[flavor] = flavor == 'prod' 
+          ? baseBundleId 
+          : "$baseBundleId.$flavor";
+    }
+    
     await _updateConfigFile(flavors, baseUrls);
     await _generateMainFiles(flavors);
     await _updateAndroidFiles(flavors, packageIds);
@@ -76,6 +90,77 @@ void main() async {
     "\n🎉 Setup Complete! Run `flutter run ${useFlavors ? '--flavor <flavor>' : ''}` to test.",
   );
   print("🤝 Happy coding! Hope this setup makes your development smoother.");
+}
+
+/// Check if FVM is installed
+Future<bool> _checkFvmInstallation() async {
+  try {
+    ProcessResult result = Process.runSync('fvm', ['--version']);
+    if (result.exitCode == 0) {
+      print("✅ FVM is already installed: ${result.stdout}");
+      return true;
+    }
+  } catch (e) {
+    // FVM is not installed or not in PATH
+  }
+  return false;
+}
+
+/// Handle FVM installation and setup
+Future<void> _handleFvmInstallation() async {
+  stdout.write("FVM (Flutter Version Management) is not installed. Would you like to install it? (y/n): ");
+  bool installFvm = (stdin.readLineSync()?.trim().toLowerCase() == 'y');
+  
+  if (!installFvm) {
+    print("⚠️ Skipping FVM installation. Note that some features may not work correctly.");
+    return;
+  }
+  
+  print("🔧 Installing FVM...");
+  
+  // Install FVM using dart pub global activate
+  try {
+    Process.runSync('dart', ['pub', 'global', 'activate', 'fvm']);
+    print("✅ FVM installed successfully!");
+    
+    // Add FVM to PATH instructions
+    print("ℹ️ Make sure FVM is in your PATH. You might need to add the following to your profile:");
+    print("  export PATH=\"\$PATH:\$HOME/.pub-cache/bin\"");
+    
+    // Install Flutter version using FVM
+    stdout.write("Would you like to install Flutter 3.29.2 using FVM? (y/n): ");
+    bool installFlutter = (stdin.readLineSync()?.trim().toLowerCase() == 'y');
+    
+    if (installFlutter) {
+      print("🔧 Installing Flutter 3.29.2 using FVM (this may take a while)...");
+      Process.runSync('fvm', ['install', '3.29.2']);
+      Process.runSync('fvm', ['use', '3.29.2']);
+      print("✅ Flutter 3.29.2 installed successfully!");
+      
+      // Suggest VS Code restart
+      stdout.write("Would you like to restart VS Code to apply FVM settings? (y/n): ");
+      bool restartVsCode = (stdin.readLineSync()?.trim().toLowerCase() == 'y');
+      
+      if (restartVsCode) {
+        print("🔄 Restarting VS Code...");
+        if (Platform.isWindows) {
+          Process.runSync('taskkill', ['/F', '/IM', 'Code.exe']);
+          Process.runSync('cmd', ['/c', 'start', 'code', '.']);
+        } else if (Platform.isMacOS) {
+          Process.runSync('pkill', ['-f', 'Visual Studio Code']);
+          Process.runSync('open', ['-a', 'Visual Studio Code', '.']);
+        } else if (Platform.isLinux) {
+          Process.runSync('pkill', ['code']);
+          Process.runSync('code', ['.']);
+        }
+        print("✅ VS Code has been restarted. Please run this setup script again.");
+        exit(0);
+      }
+    }
+  } catch (e) {
+    print("⚠️ Failed to install FVM: $e");
+    print("ℹ️ Please install FVM manually: https://fvm.app/docs/getting_started/installation");
+  }
 }
 
 /// Converts a string to PascalCase
@@ -258,7 +343,7 @@ Future<void> _createVSCodeFiles(List<String> flavors) async {
   "dart.previewFlutterUiGuides": true,
   "dart.devToolsLocation": "external",
   "dart.runPubGetOnPubspecChanges": "prompt",
-  "dart.flutterSdkPath": ".fvm/versions/3.29.2",
+  "dart.flutterSdkPath": ".fvm/flutter_sdk",
   "dart.sdkPath": ".fvm/flutter_sdk/bin/dart",
   "[dart]": {
     "editor.formatOnType": true,
@@ -393,8 +478,6 @@ Future<void> _createVSCodeFiles(List<String> flavors) async {
   // Hover to view descriptions of existing attributes.
   // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
-  "dart.flutterSdkPath": ".fvm/flutter_sdk",
-  "dart.sdkPath": ".fvm/flutter_sdk/bin/dart",
   "configurations": [
 ${launchConfigurations.join(',\n')}
   ]${compoundConfigs.isNotEmpty ? ',\n  "compounds": [\n${compoundConfigs.join(',\n')}\n  ]' : ''}
