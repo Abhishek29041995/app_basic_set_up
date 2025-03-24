@@ -565,7 +565,7 @@ part 'router.gr.dart';
 class AppRouter extends _\$AppRouter {
   @override
   List<AutoRoute> get routes => [
-        AutoRoute(page: ${entryPageClass}Route.page, initial: true),
+        AutoRoute(page: ${entryPageClass}PageRoute.page, initial: true),
       ];
       
   // Add modalSheetBuilder to fix the error
@@ -599,7 +599,7 @@ class ${entryPageClass}Page extends StatelessWidget {
 ''';
 
   File("lib/routes/router.dart").writeAsStringSync(content);
-  print("✅ Created lib/routes/router.dart");
+  print("✅ Updated lib/routes/router.dart with correct route naming.");
 
   // Also create the page separately
   Directory(
@@ -771,9 +771,11 @@ Future<void> _updatePubspec() async {
     if (line.trim().startsWith("dependencies:")) {
       for (var entry in newDependencies.entries) {
         if (!existingDependencies.contains(entry.key)) {
-          finalLines.add(entry.value == null
-              ? "  ${entry.key}:"
-              : "  ${entry.key}: ${entry.value}");
+          finalLines.add(
+            entry.value == null
+                ? "  ${entry.key}:"
+                : "  ${entry.key}: ${entry.value}",
+          );
         }
       }
     } else if (line.trim().startsWith("dev_dependencies:")) {
