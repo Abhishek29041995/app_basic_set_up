@@ -559,9 +559,7 @@ Future<void> _generateRouterFile(
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 
-import 'package:auto_route/auto_route.dart';
-
-part 'router.g.dart';
+part 'router.gr.dart';
 
 @AutoRouterConfig(replaceInRouteName: 'Page,Route,Tab')
 class AppRouter extends _\$AppRouter {
@@ -718,7 +716,6 @@ Future<void> _updatePubspec() async {
     "build_runner": "^2.4.12",
     "json_serializable": "^6.8.0",
     "freezed": "^2.5.7",
-    "dart_code_metrics": "^5.7.6",
   };
 
   // Track existing dependencies
