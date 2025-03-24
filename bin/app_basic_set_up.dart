@@ -894,16 +894,7 @@ Future<void> _updateIOSFiles(
   List<String> flavors,
   Map<String, String> packageIds,
 ) async {
-  print("⚠️ iOS flavor setup requires manual configuration.");
-  print("ℹ️ Please follow these steps for iOS setup:");
-  print("  1. Open iOS/Runner.xcodeproj in Xcode");
-  print("  2. Go to Runner target > Build Settings");
-  print("  3. Add User-Defined settings for each flavor:");
-
-  for (var flavor in flavors) {
-    print("     - For $flavor:");
-    print("       • PRODUCT_BUNDLE_IDENTIFIER = ${packageIds[flavor]}");
-  }
+  print("🔧 Setting up iOS flavors...");
 
   // Create iOS flavor configurations helper file
   Directory("ios/Flutter/flavors").createSync(recursive: true);
@@ -919,6 +910,80 @@ FLUTTER_TARGET=lib/main_$flavor.dart;
   }
 
   print("✅ Created iOS flavor configuration files in ios/Flutter/flavors/");
+
+  // Automate the creation of custom schemes
+  await _createIOSCustomSchemes(flavors);
+}
+
+/// Automates the creation of custom schemes for iOS flavors
+Future<void> _createIOSCustomSchemes(List<String> flavors) async {
+  String xcodeProjPath = "ios/Runner.xcodeproj";
+  String pbxprojPath = "$xcodeProjPath/project.pbxproj";
+
+  if (!File(pbxprojPath).existsSync()) {
+    print("⚠️ Xcode project file not found at $pbxprojPath. Skipping iOS scheme setup.");
+    return;
+  }
+
+  String pbxprojContent = File(pbxprojPath).readAsStringSync();
+
+  for (var flavor in flavors) {
+    String schemeName = "Runner-$flavor";
+
+    if (pbxprojContent.contains(schemeName)) {
+      print("ℹ️ Scheme $schemeName already exists. Skipping.");
+      continue;
+    }
+
+    print("🔧 Adding scheme $schemeName...");
+
+    // Add flavor-specific build configurations
+    String buildConfig = '''
+    ${flavor}Debug /* Debug */ = {
+      isa = XCBuildConfiguration;
+      buildSettings = {
+        PRODUCT_NAME = "Runner";
+        CONFIGURATION_BUILD_DIR = "\$(BUILD_DIR)/\$(CONFIGURATION)/$flavor";
+      };
+      name = Debug;
+    };
+    ${flavor}Release /* Release */ = {
+      isa = XCBuildConfiguration;
+      buildSettings = {
+        PRODUCT_NAME = "Runner";
+        CONFIGURATION_BUILD_DIR = "\$(BUILD_DIR)/\$(CONFIGURATION)/$flavor";
+      };
+      name = Release;
+    };
+    ''';
+
+    pbxprojContent = pbxprojContent.replaceFirst(
+      "/* End XCBuildConfiguration section */",
+      "$buildConfig\n/* End XCBuildConfiguration section */",
+    );
+
+    // Add scheme to the project
+    String schemeEntry = '''
+    ${schemeName} /* Custom Scheme */ = {
+      isa = XCConfigurationList;
+      buildConfigurations = (
+        ${flavor}Debug /* Debug */,
+        ${flavor}Release /* Release */,
+      );
+      defaultConfigurationIsVisible = 0;
+      defaultConfigurationName = Release;
+    };
+    ''';
+
+    pbxprojContent = pbxprojContent.replaceFirst(
+      "/* End XCConfigurationList section */",
+      "$schemeEntry\n/* End XCConfigurationList section */",
+    );
+  }
+
+  // Write the updated content back to the pbxproj file
+  File(pbxprojPath).writeAsStringSync(pbxprojContent);
+  print("✅ Updated Xcode project with custom schemes for flavors.");
 }
 
 /// Removes the default main.dart file if flavors are added
