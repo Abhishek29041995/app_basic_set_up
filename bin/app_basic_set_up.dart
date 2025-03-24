@@ -3,56 +3,101 @@ import 'dart:io';
 void main() async {
   print("🚀 Welcome to Flutter App Setup CLI!");
 
-  // Check for FVM installation first
-  bool fvmInstalled = await _checkFvmInstallation();
-  if (!fvmInstalled) {
-    await _handleFvmInstallation();
-  }
+  if (!await _ensureFvmInstalled()) return;
 
-  stdout.write("Enter the name of your entry page (default: intro): ");
-  String entryPageInput = stdin.readLineSync()?.trim().toLowerCase() ?? "intro";
-  if (entryPageInput.isEmpty) entryPageInput = "intro";
-
-  // Convert to proper naming format for class
+  String entryPageInput = _getEntryPageInput();
   String entryPageClass = _toPascalCase(entryPageInput);
-  // For file and folder names, use snake case
   String entryPageFileName = "${entryPageInput}_page.dart";
   String entryPageFolder = entryPageInput;
 
-  stdout.write("Would you like to add flavors? (y/n): ");
-  bool useFlavors = (stdin.readLineSync()?.trim().toLowerCase() == 'y');
-
+  bool useFlavors = _getYesNoInput("Would you like to add flavors? (y/n): ");
   List<String> flavors = [];
   Map<String, String> baseUrls = {};
   String baseBundleId = "";
 
   if (useFlavors) {
-    stdout.write("Enter flavors (comma-separated, e.g., dev,uat,prod): ");
-    String? flavorsInput = stdin.readLineSync();
-    flavors =
-        flavorsInput?.split(",").map((e) => e.trim().toLowerCase()).toList() ??
-        [];
-
+    flavors = _getFlavors();
     if (flavors.isEmpty) {
       print("⚠️ No flavors provided. Exiting.");
       return;
     }
-
-    // Get base bundle ID once
-    stdout.write("Enter base Bundle ID (e.g., com.example.app): ");
-    baseBundleId = stdin.readLineSync()?.trim() ?? "com.example.app";
-
-    for (var flavor in flavors) {
-      stdout.write("Enter Base URL for $flavor: ");
-      baseUrls[flavor] = stdin.readLineSync() ?? "";
-    }
+    baseBundleId = _getBaseBundleId();
+    baseUrls = _getBaseUrls(flavors);
   }
 
-  stdout.write("Would you like to add VSCode configuration files? (y/n): ");
-  bool addVSCodeConfig = (stdin.readLineSync()?.trim().toLowerCase() == 'y');
+  bool addVSCodeConfig = _getYesNoInput(
+    "Would you like to add VSCode configuration files? (y/n): ",
+  );
 
   print("\n🛠 Generating project structure...\n");
 
+  await _setupProject(
+    entryPageClass,
+    entryPageFolder,
+    entryPageFileName,
+    useFlavors,
+    flavors,
+    baseUrls,
+    baseBundleId,
+    addVSCodeConfig,
+  );
+
+  print(
+    "\n🎉 Setup Complete! Run `flutter run ${useFlavors ? '--flavor <flavor>' : ''}` to test.",
+  );
+  print("🤝 Happy coding! Hope this setup makes your development smoother.");
+}
+
+Future<bool> _ensureFvmInstalled() async {
+  bool fvmInstalled = await _checkFvmInstallation();
+  if (!fvmInstalled) {
+    await _handleFvmInstallation();
+    return false;
+  }
+  return true;
+}
+
+String _getEntryPageInput() {
+  stdout.write("Enter the name of your entry page (default: intro): ");
+  String input = stdin.readLineSync()?.trim().toLowerCase() ?? "intro";
+  return input.isEmpty ? "intro" : input;
+}
+
+bool _getYesNoInput(String prompt) {
+  stdout.write(prompt);
+  return stdin.readLineSync()?.trim().toLowerCase() == 'y';
+}
+
+List<String> _getFlavors() {
+  stdout.write("Enter flavors (comma-separated, e.g., dev,uat,prod): ");
+  String? input = stdin.readLineSync();
+  return input?.split(",").map((e) => e.trim().toLowerCase()).toList() ?? [];
+}
+
+String _getBaseBundleId() {
+  stdout.write("Enter base Bundle ID (e.g., com.example.app): ");
+  return stdin.readLineSync()?.trim() ?? "com.example.app";
+}
+
+Map<String, String> _getBaseUrls(List<String> flavors) {
+  Map<String, String> baseUrls = {};
+  for (var flavor in flavors) {
+    stdout.write("Enter Base URL for $flavor: ");
+    baseUrls[flavor] = stdin.readLineSync() ?? "";
+  }
+  return baseUrls;
+}
+
+Future<void> _setupProject(
+  String entryPageClass,
+  String entryPageFolder,
+  String entryPageFileName,
+  bool useFlavors,
+  List<String> flavors,
+  Map<String, String> baseUrls,
+  String baseBundleId,
+  bool addVSCodeConfig,
+) async {
   await _updatePubspec();
   await _runPubGet();
   await _generateAppFile();
@@ -67,29 +112,27 @@ void main() async {
   await _runBuildRunner();
 
   if (useFlavors) {
-    // Generate package IDs based on the base bundle ID
-    Map<String, String> packageIds = {};
-    for (var flavor in flavors) {
-      // For prod, use the base bundle ID as is; for others, append the flavor
-      packageIds[flavor] = flavor == 'prod' 
-          ? baseBundleId 
-          : "$baseBundleId.$flavor";
-    }
-    
+    Map<String, String> packageIds = _generatePackageIds(flavors, baseBundleId);
     await _updateConfigFile(flavors, baseUrls);
     await _generateMainFiles(flavors);
     await _updateAndroidFiles(flavors, packageIds);
     await _updateIOSFiles(flavors, packageIds);
+    _removeMainFile(); // Remove main.dart if flavors are added
   }
 
   if (addVSCodeConfig) {
     await _createVSCodeFiles(flavors);
   }
+}
 
-  print(
-    "\n🎉 Setup Complete! Run `flutter run ${useFlavors ? '--flavor <flavor>' : ''}` to test.",
-  );
-  print("🤝 Happy coding! Hope this setup makes your development smoother.");
+Map<String, String> _generatePackageIds(
+  List<String> flavors,
+  String baseBundleId,
+) {
+  return {
+    for (var flavor in flavors)
+      flavor: flavor == 'prod' ? baseBundleId : "$baseBundleId.$flavor",
+  };
 }
 
 /// Check if FVM is installed
@@ -108,39 +151,49 @@ Future<bool> _checkFvmInstallation() async {
 
 /// Handle FVM installation and setup
 Future<void> _handleFvmInstallation() async {
-  stdout.write("FVM (Flutter Version Management) is not installed. Would you like to install it? (y/n): ");
+  stdout.write(
+    "FVM (Flutter Version Management) is not installed. Would you like to install it? (y/n): ",
+  );
   bool installFvm = (stdin.readLineSync()?.trim().toLowerCase() == 'y');
-  
+
   if (!installFvm) {
-    print("⚠️ Skipping FVM installation. Note that some features may not work correctly.");
+    print(
+      "⚠️ Skipping FVM installation. Note that some features may not work correctly.",
+    );
     return;
   }
-  
+
   print("🔧 Installing FVM...");
-  
+
   // Install FVM using dart pub global activate
   try {
     Process.runSync('dart', ['pub', 'global', 'activate', 'fvm']);
     print("✅ FVM installed successfully!");
-    
+
     // Add FVM to PATH instructions
-    print("ℹ️ Make sure FVM is in your PATH. You might need to add the following to your profile:");
+    print(
+      "ℹ️ Make sure FVM is in your PATH. You might need to add the following to your profile:",
+    );
     print("  export PATH=\"\$PATH:\$HOME/.pub-cache/bin\"");
-    
+
     // Install Flutter version using FVM
     stdout.write("Would you like to install Flutter 3.29.2 using FVM? (y/n): ");
     bool installFlutter = (stdin.readLineSync()?.trim().toLowerCase() == 'y');
-    
+
     if (installFlutter) {
-      print("🔧 Installing Flutter 3.29.2 using FVM (this may take a while)...");
+      print(
+        "🔧 Installing Flutter 3.29.2 using FVM (this may take a while)...",
+      );
       Process.runSync('fvm', ['install', '3.29.2']);
       Process.runSync('fvm', ['use', '3.29.2']);
       print("✅ Flutter 3.29.2 installed successfully!");
-      
+
       // Suggest VS Code restart
-      stdout.write("Would you like to restart VS Code to apply FVM settings? (y/n): ");
+      stdout.write(
+        "Would you like to restart VS Code to apply FVM settings? (y/n): ",
+      );
       bool restartVsCode = (stdin.readLineSync()?.trim().toLowerCase() == 'y');
-      
+
       if (restartVsCode) {
         print("🔄 Restarting VS Code...");
         if (Platform.isWindows) {
@@ -153,13 +206,17 @@ Future<void> _handleFvmInstallation() async {
           Process.runSync('pkill', ['code']);
           Process.runSync('code', ['.']);
         }
-        print("✅ VS Code has been restarted. Please run this setup script again.");
+        print(
+          "✅ VS Code has been restarted. Please run this setup script again.",
+        );
         exit(0);
       }
     }
   } catch (e) {
     print("⚠️ Failed to install FVM: $e");
-    print("ℹ️ Please install FVM manually: https://fvm.app/docs/getting_started/installation");
+    print(
+      "ℹ️ Please install FVM manually: https://fvm.app/docs/getting_started/installation",
+    );
   }
 }
 
@@ -270,7 +327,7 @@ dart_code_metrics:
   metrics-exclude:
     # - test/**
     # - integration_test/**
-    - lib/core/di/locator.dart
+    - lib/di/locator.dart
   rules:
     - newline-before-return
     - no-boolean-literal-compare
@@ -287,38 +344,7 @@ dart_code_metrics:
 ''';
 
   File("analysis_options.yaml").writeAsStringSync(content);
-
-  // Add flutter_lints to dev_dependencies if it's not already there
-  await _addFlutterLintsDependency();
-
   print("✅ Created analysis_options.yaml with code quality rules");
-}
-
-/// Add flutter_lints to dev_dependencies
-Future<void> _addFlutterLintsDependency() async {
-  File pubspecFile = File("pubspec.yaml");
-  if (!pubspecFile.existsSync()) return;
-
-  String content = pubspecFile.readAsStringSync();
-  if (!content.contains("flutter_lints")) {
-    List<String> lines = content.split("\n");
-    int devDepsIndex = lines.indexWhere(
-      (line) => line.trim() == "dev_dependencies:",
-    );
-
-    if (devDepsIndex != -1) {
-      // Find the position to insert the dependency
-      int insertIndex = devDepsIndex + 1;
-      while (insertIndex < lines.length &&
-          (lines[insertIndex].trim().isEmpty ||
-              lines[insertIndex].startsWith("  "))) {
-        insertIndex++;
-      }
-
-      lines.insert(insertIndex, "  flutter_lints: ^2.0.0");
-      pubspecFile.writeAsStringSync(lines.join("\n"));
-    }
-  }
 }
 
 /// Create VSCode settings.json and launch.json files
@@ -497,9 +523,9 @@ Future<void> _generateAppFile() async {
   String content = '''
 import 'package:flutter/material.dart';
 import 'package:auto_route/auto_route.dart';
-import 'core/di/locator.dart';
-import 'core/router/router.dart';
-import 'core/config/config.dart';
+import 'di/locator.dart';
+import 'routes/router.dart';
+import 'config.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -510,24 +536,20 @@ class App extends StatelessWidget {
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: locator<Config>().appName,
-      routerDelegate: AutoRouterDelegate(
-        router,
-      ),
-      routeInformationParser: router.defaultRouteParser(),
+      routerConfig: router.config(),
     );
   }
 }
 ''';
 
-  Directory("lib/core/config").createSync(recursive: true);
-  Directory("lib/core/router").createSync(recursive: true);
-  Directory("lib/core/di").createSync(recursive: true);
+  Directory("lib/di").createSync(recursive: true);
+  Directory("lib/routes").createSync(recursive: true);
 
   File("lib/app.dart").writeAsStringSync(content);
   print("✅ Created lib/app.dart");
 }
 
-/// Generates `lib/core/router/router.dart`
+/// Generates `lib/routes/router.dart`
 Future<void> _generateRouterFile(
   String entryPageClass,
   String entryPageFolder,
@@ -536,58 +558,57 @@ Future<void> _generateRouterFile(
   String content = '''
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
-import '../../presentation/screens/$entryPageFolder/$entryPageFileName';
 
-part 'router.gr.dart';
+import 'package:auto_route/auto_route.dart';
 
-@AutoRouterConfig()
-class AppRouter extends \$AppRouter {
+part 'router.g.dart';
+
+@AutoRouterConfig(replaceInRouteName: 'Page,Route,Tab')
+class AppRouter extends _\$AppRouter {
   @override
   List<AutoRoute> get routes => [
-        AutoRoute(page: ${entryPageClass}Page.page, initial: true),
+        AutoRoute(page: ${entryPageClass}Route.page, initial: true),
       ];
+      
+  // Add modalSheetBuilder to fix the error
+  @override
+  Route<T> modalSheetBuilder<T>(
+    BuildContext context,
+    Widget child,
+    AutoRoutePage<T> page,
+  ) {
+    return ModalBottomSheetRoute(
+      settings: page,
+      builder: (context) => child,
+      isScrollControlled: true,
+    );
+  }
+}
+
+// The route will be auto-generated by build_runner
+@RoutePage()
+class ${entryPageClass}Page extends StatelessWidget {
+  const ${entryPageClass}Page({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('$entryPageClass Page')),
+      body: const Center(child: Text('Welcome to $entryPageClass!')),
+    );
+  }
 }
 ''';
 
-  File("lib/core/router/router.dart").writeAsStringSync(content);
-  print("✅ Created lib/core/router/router.dart");
-}
+  File("lib/routes/router.dart").writeAsStringSync(content);
+  print("✅ Created lib/routes/router.dart");
 
-/// Generates `lib/core/di/locator.dart`
-Future<void> _generateLocatorFile() async {
-  String content = '''
-import 'package:get_it/get_it.dart';
-import '../router/router.dart';
-import '../config/config.dart';
-
-final GetIt locator = GetIt.instance;
-
-void setupLocator() {
-  // Register router
-  locator.registerSingleton<AppRouter>(AppRouter());
-  
-  // Register config
-  locator.registerSingleton<Config>(Config());
-  
-  // Register services and repositories here
-}
-''';
-
-  File("lib/core/di/locator.dart").writeAsStringSync(content);
-  print("✅ Created lib/core/di/locator.dart");
-}
-
-/// Creates presentation structure and entry page
-Future<void> _generatePresentationFiles(
-  String entryPageClass,
-  String entryPageFolder,
-  String entryPageFileName,
-) async {
+  // Also create the page separately
   Directory(
     "lib/presentation/screens/$entryPageFolder",
   ).createSync(recursive: true);
 
-  String content = '''
+  String pageContent = '''
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 
@@ -607,10 +628,44 @@ class ${entryPageClass}Page extends StatelessWidget {
 
   File(
     "lib/presentation/screens/$entryPageFolder/$entryPageFileName",
-  ).writeAsStringSync(content);
+  ).writeAsStringSync(pageContent);
   print(
     "✅ Created lib/presentation/screens/$entryPageFolder/$entryPageFileName",
   );
+}
+
+/// Generates `lib/di/locator.dart`
+Future<void> _generateLocatorFile() async {
+  String content = '''
+import 'package:get_it/get_it.dart';
+import '../routes/router.dart';
+import '../config.dart';
+
+final GetIt locator = GetIt.instance;
+
+void setupLocator() {
+  // Register router
+  locator.registerSingleton<AppRouter>(AppRouter());
+  
+  // Register config
+  locator.registerSingleton<Config>(Config());
+  
+  // Register services and repositories here
+}
+''';
+
+  File("lib/di/locator.dart").writeAsStringSync(content);
+  print("✅ Created lib/di/locator.dart");
+}
+
+/// Creates presentation structure and entry page
+Future<void> _generatePresentationFiles(
+  String entryPageClass,
+  String entryPageFolder,
+  String entryPageFileName,
+) async {
+  // This is now handled in the router file generation
+  // We're keeping the method in case we need to add more presentation files
 }
 
 /// Runs `flutter pub get`
@@ -648,22 +703,21 @@ Future<void> _updatePubspec() async {
   bool dependenciesUpdated = false, devDependenciesUpdated = false;
   bool inFlutterSection = false;
 
-  // New dependencies to add (auto_route without a version)
+  // New dependencies to add with specified versions
   Map<String, String?> newDependencies = {
-    "auto_route": null, // No version specified
-    "get_it": "^7.6.7",
-    "flutter_bloc": "^8.1.3",
-    "equatable": "^2.0.5",
-    "dio": "^5.3.2",
+    "auto_route": null, // No version defined
+    "get_it": "^8.0.0",
+    "flutter_bloc": "^8.1.6",
+    "equatable": "^2.0.7",
+    "dio": "^5.7.0",
   };
 
   // New dev_dependencies to add
   Map<String, String> newDevDependencies = {
     "auto_route_generator": "^8.0.0",
-    "build_runner": "^2.3.3",
-    "json_serializable": "^6.6.1",
-    "freezed": "^2.3.2",
-    "flutter_lints": "^2.0.0",
+    "build_runner": "^2.4.12",
+    "json_serializable": "^6.8.0",
+    "freezed": "^2.5.7",
     "dart_code_metrics": "^5.7.6",
   };
 
@@ -720,11 +774,9 @@ Future<void> _updatePubspec() async {
     if (line.trim().startsWith("dependencies:")) {
       for (var entry in newDependencies.entries) {
         if (!existingDependencies.contains(entry.key)) {
-          if (entry.value == null) {
-            finalLines.add("  ${entry.key}:"); // No version
-          } else {
-            finalLines.add("  ${entry.key}: ${entry.value}");
-          }
+          finalLines.add(entry.value == null
+              ? "  ${entry.key}:"
+              : "  ${entry.key}: ${entry.value}");
         }
       }
     } else if (line.trim().startsWith("dev_dependencies:")) {
@@ -741,7 +793,7 @@ Future<void> _updatePubspec() async {
   print("✅ Successfully updated pubspec.yaml without duplicates.");
 }
 
-/// Updates `lib/core/config/config.dart`
+/// Updates `lib/config.dart`
 Future<void> _updateConfigFile(
   List<String> flavors,
   Map<String, String> baseUrls,
@@ -764,16 +816,16 @@ ${flavors.map((f) => "      case Flavor.$f:\n        return '${baseUrls[f]}';").
 }
 ''';
 
-  File("lib/core/config/config.dart").writeAsStringSync(content);
-  print("✅ Created lib/core/config/config.dart");
+  File("lib/config.dart").writeAsStringSync(content);
+  print("✅ Created lib/config.dart");
 }
 
 /// Generates `main_<flavor>.dart` for each flavor
 Future<void> _generateMainFiles(List<String> flavors) async {
   String mainContent = '''
 import 'package:flutter/material.dart';
-import 'core/config/config.dart';
-import 'core/di/locator.dart';
+import 'config.dart';
+import 'di/locator.dart';
 import 'app.dart';
 
 void main() {
@@ -789,8 +841,8 @@ void main() {
   for (var flavor in flavors) {
     String content = '''
 import 'package:flutter/material.dart';
-import 'core/config/config.dart';
-import 'core/di/locator.dart';
+import 'config.dart';
+import 'di/locator.dart';
 import 'app.dart';
 
 void main() {
@@ -868,4 +920,13 @@ FLUTTER_TARGET=lib/main_$flavor.dart;
   }
 
   print("✅ Created iOS flavor configuration files in ios/Flutter/flavors/");
+}
+
+/// Removes the default main.dart file if flavors are added
+void _removeMainFile() {
+  File mainFile = File("lib/main.dart");
+  if (mainFile.existsSync()) {
+    mainFile.deleteSync();
+    print("🗑️ Removed lib/main.dart as flavors are added.");
+  }
 }
