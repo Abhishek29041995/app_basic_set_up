@@ -929,19 +929,21 @@ options:
   bundleIdPrefix: com.example
   createIntermediateGroups: true
 configs:
-  Debug:
+${flavors.map((flavor) => '''
+  ${flavor}-Debug:
     type: debug
-  Release:
+  ${flavor}-Release:
     type: release
+''').join('')}
 schemes:
 ${flavors.map((flavor) => '''
-  $flavor:
+  ${flavor}:
     build:
       targets:
         Runner:
-          buildTypes: [debug, release]
+          buildTypes: [${flavor}-Debug, ${flavor}-Release]
     run:
-      config: Debug
+      config: ${flavor}-Debug
 ''').join('')}
 targets:
   Runner:
@@ -949,14 +951,16 @@ targets:
     platform: iOS
     sources: [Runner]
     configFiles:
-      Debug: Flutter/Generated.xcconfig
-      Release: Flutter/Generated.xcconfig
+${flavors.map((flavor) => '''
+      ${flavor}-Debug: Flutter/flavors/${flavor}.xcconfig
+      ${flavor}-Release: Flutter/flavors/${flavor}.xcconfig
+''').join('')}
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: ${packageIds['prod']}
 ''';
 
   File("ios/project.yml").writeAsStringSync(configContent);
-  print("✅ Created ios/project.yml for xcodegen.");
+  print("✅ Created ios/project.yml for xcodegen with matching schemes and flavors.");
 }
 
 /// Runs xcodegen to generate the Xcode project
@@ -1012,13 +1016,20 @@ void _provideManualXcodeSetupGuide() {
   print("\n⚠️ Manual Xcode Flavor Setup Required:");
   print("1. Open `ios/Runner.xcodeproj` in Xcode.");
   print("2. Go to the `Product` menu and select `Scheme` > `Manage Schemes...`.");
-  print("3. Duplicate the existing `Runner` scheme for each flavor (e.g., `Runner-dev`, `Runner-uat`, `Runner-prod`).");
+  print("3. For each flavor (e.g., `dev`, `uat`, `prod`):");
+  print("   a. Duplicate the existing `Runner` scheme.");
+  print("   b. Rename the scheme to match the flavor name exactly (e.g., `dev`, `uat`, `prod`).");
   print("4. Edit each scheme:");
-  print("   - Set the `Build Configuration` to match the flavor (e.g., `Debug-dev`, `Release-prod`).");
-  print("   - Update the `Run` action to use the corresponding flavor's xcconfig file.");
-  print("5. Save the schemes and ensure they are shared (check the `Shared` checkbox).");
-  print("6. Update the `Info.plist` file for each flavor if needed (e.g., app name, icons).");
-  print("7. Build and run the app using the appropriate scheme.");
+  print("   a. Select the scheme and click `Edit...`.");
+  print("   b. Under the `Build` section, set the `Build Configuration` to:");
+  print("      - `Debug` for the `Run` action.");
+  print("      - `Release` for the `Archive` action.");
+  print("   c. Under the `Run` action, set the `Info.plist` file to the corresponding flavor's configuration.");
+  print("5. Update the `Info.plist` file for each flavor if needed (e.g., app name, icons).");
+  print("6. Ensure the schemes are shared:");
+  print("   a. In the `Manage Schemes...` window, check the `Shared` checkbox for each scheme.");
+  print("7. Save the changes and close Xcode.");
+  print("8. Build and run the app using the appropriate scheme.");
   print("\nℹ️ For more details, refer to the Flutter documentation on flavors: https://docs.flutter.dev/deployment/flavors");
 }
 
