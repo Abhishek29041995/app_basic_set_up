@@ -523,7 +523,7 @@ Future<void> _generateAppFile() async {
   String content = '''
 import 'package:flutter/material.dart';
 import 'package:auto_route/auto_route.dart';
-import 'di/locator.dart';
+import 'locator.dart';
 import 'routes/router.dart';
 import 'config.dart';
 
@@ -632,12 +632,12 @@ class ${entryPageClass}Page extends StatelessWidget {
   );
 }
 
-/// Generates `lib/di/locator.dart`
+/// Generates `lib/locator.dart`
 Future<void> _generateLocatorFile() async {
   String content = '''
 import 'package:get_it/get_it.dart';
-import '../routes/router.dart';
-import '../config.dart';
+import 'routes/router.dart';
+import 'config.dart';
 
 final GetIt locator = GetIt.instance;
 
@@ -652,8 +652,8 @@ void setupLocator() {
 }
 ''';
 
-  File("lib/di/locator.dart").writeAsStringSync(content);
-  print("✅ Created lib/di/locator.dart");
+  File("lib/locator.dart").writeAsStringSync(content);
+  print("✅ Created lib/locator.dart");
 }
 
 /// Creates presentation structure and entry page
@@ -824,7 +824,7 @@ Future<void> _generateMainFiles(List<String> flavors) async {
   String mainContent = '''
 import 'package:flutter/material.dart';
 import 'config.dart';
-import 'di/locator.dart';
+import 'locator.dart';
 import 'app.dart';
 
 void main() {
@@ -841,7 +841,7 @@ void main() {
     String content = '''
 import 'package:flutter/material.dart';
 import 'config.dart';
-import 'di/locator.dart';
+import 'locator.dart';
 import 'app.dart';
 
 void main() {
