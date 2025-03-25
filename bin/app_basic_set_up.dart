@@ -911,11 +911,61 @@ FLUTTER_TARGET=lib/main_$flavor.dart;
 
   print("✅ Created iOS flavor configuration files in ios/Flutter/flavors/");
 
+  // Update Xcode project configurations
+  await _updateXcodeBuildConfigurations(flavors);
+
   // Generate xcodegen configuration file
   await _generateXcodegenConfig(flavors, packageIds);
 
   // Run xcodegen to generate the Xcode project
   await _runXcodegen();
+}
+
+/// Updates Xcode build configurations for flavors
+Future<void> _updateXcodeBuildConfigurations(List<String> flavors) async {
+  String pbxprojPath = "ios/Runner.xcodeproj/project.pbxproj";
+
+  if (!File(pbxprojPath).existsSync()) {
+    print("⚠️ Xcode project file not found at $pbxprojPath. Skipping build configuration setup.");
+    return;
+  }
+
+  String pbxprojContent = File(pbxprojPath).readAsStringSync();
+
+  for (var flavor in flavors) {
+    // Duplicate Debug, Release, and Profile configurations for each flavor
+    for (var config in ['Debug', 'Release', 'Profile']) {
+      String originalConfig = "$config /* $config */";
+      String newConfig = "$config-$flavor /* $config-$flavor */";
+
+      if (!pbxprojContent.contains(newConfig)) {
+        pbxprojContent = pbxprojContent.replaceFirst(
+          originalConfig,
+          "$originalConfig\n        $newConfig",
+        );
+
+        String buildSettings = '''
+        $newConfig = {
+          isa = XCBuildConfiguration;
+          buildSettings = {
+            PRODUCT_NAME = "Runner";
+            CONFIGURATION_BUILD_DIR = "\$(BUILD_DIR)/\$(CONFIGURATION)/$flavor";
+          };
+          name = $config-$flavor;
+        };
+        ''';
+
+        pbxprojContent = pbxprojContent.replaceFirst(
+          "/* End XCBuildConfiguration section */",
+          "$buildSettings\n/* End XCBuildConfiguration section */",
+        );
+      }
+    }
+  }
+
+  // Write the updated content back to the pbxproj file
+  File(pbxprojPath).writeAsStringSync(pbxprojContent);
+  print("✅ Updated Xcode build configurations for flavors.");
 }
 
 /// Generates the xcodegen configuration file
@@ -1022,14 +1072,21 @@ void _provideManualXcodeSetupGuide() {
   print("4. Edit each scheme:");
   print("   a. Select the scheme and click `Edit...`.");
   print("   b. Under the `Build` section, set the `Build Configuration` to:");
-  print("      - `Debug` for the `Run` action.");
-  print("      - `Release` for the `Archive` action.");
-  print("   c. Under the `Run` action, set the `Info.plist` file to the corresponding flavor's configuration.");
-  print("5. Update the `Info.plist` file for each flavor if needed (e.g., app name, icons).");
-  print("6. Ensure the schemes are shared:");
+  print("      - `Debug-<flavor>` for the `Run` action.");
+  print("      - `Release-<flavor>` for the `Archive` action.");
+  print("      - `Profile-<flavor>` for the `Profile` action.");
+  print("   c. Ensure the `Info.plist` file is set to the corresponding flavor's configuration.");
+  print("5. Duplicate the `Debug`, `Release`, and `Profile` build configurations:");
+  print("   a. In the Xcode project navigator, select the `Runner` project.");
+  print("   b. Go to the `Info` tab.");
+  print("   c. Duplicate the `Debug`, `Release`, and `Profile` configurations for each flavor:");
+  print("      - Rename them to `Debug-<flavor>`, `Release-<flavor>`, and `Profile-<flavor>`.");
+  print("   d. Update the `Build Settings` for each configuration to use the corresponding flavor's `xcconfig` file.");
+  print("6. Update the `Info.plist` file for each flavor if needed (e.g., app name, icons).");
+  print("7. Ensure the schemes are shared:");
   print("   a. In the `Manage Schemes...` window, check the `Shared` checkbox for each scheme.");
-  print("7. Save the changes and close Xcode.");
-  print("8. Build and run the app using the appropriate scheme.");
+  print("8. Save the changes and close Xcode.");
+  print("9. Build and run the app using the appropriate scheme.");
   print("\nℹ️ For more details, refer to the Flutter documentation on flavors: https://docs.flutter.dev/deployment/flavors");
 }
 
