@@ -961,6 +961,37 @@ targets:
 
 /// Runs xcodegen to generate the Xcode project
 Future<void> _runXcodegen() async {
+  print("🔧 Checking if xcodegen is installed...");
+  bool isXcodegenInstalled = _isXcodegenInstalled();
+
+  if (!isXcodegenInstalled) {
+    stdout.write("⚠️ xcodegen is not installed. Would you like to install it? (y/n): ");
+    bool installXcodegen = stdin.readLineSync()?.trim().toLowerCase() == 'y';
+
+    if (!installXcodegen) {
+      print("⚠️ xcodegen is required to generate the Xcode project. Exiting.");
+      _provideManualXcodeSetupGuide();
+      return;
+    }
+
+    print("🔧 Installing xcodegen...");
+    try {
+      ProcessResult result = Process.runSync('brew', ['install', 'xcodegen']);
+      if (result.exitCode == 0) {
+        print("✅ xcodegen installed successfully.");
+      } else {
+        print("⚠️ Failed to install xcodegen: ${result.stderr}");
+        _provideManualXcodeSetupGuide();
+        return;
+      }
+    } catch (e) {
+      print("⚠️ Homebrew is not installed or an error occurred: $e");
+      print("ℹ️ Please install Homebrew (https://brew.sh/) and try again.");
+      _provideManualXcodeSetupGuide();
+      return;
+    }
+  }
+
   print("🔧 Running xcodegen to generate Xcode project...");
   try {
     ProcessResult result = Process.runSync('xcodegen', ['generate', '--project', 'ios']);
@@ -968,9 +999,36 @@ Future<void> _runXcodegen() async {
       print("✅ Successfully generated Xcode project using xcodegen.");
     } else {
       print("⚠️ Failed to run xcodegen: ${result.stderr}");
+      _provideManualXcodeSetupGuide();
     }
   } catch (e) {
-    print("⚠️ xcodegen is not installed. Please install it using `brew install xcodegen`.");
+    print("⚠️ An error occurred while running xcodegen: $e");
+    _provideManualXcodeSetupGuide();
+  }
+}
+
+/// Provides a step-by-step guide for manual Xcode flavor setup
+void _provideManualXcodeSetupGuide() {
+  print("\n⚠️ Manual Xcode Flavor Setup Required:");
+  print("1. Open `ios/Runner.xcodeproj` in Xcode.");
+  print("2. Go to the `Product` menu and select `Scheme` > `Manage Schemes...`.");
+  print("3. Duplicate the existing `Runner` scheme for each flavor (e.g., `Runner-dev`, `Runner-uat`, `Runner-prod`).");
+  print("4. Edit each scheme:");
+  print("   - Set the `Build Configuration` to match the flavor (e.g., `Debug-dev`, `Release-prod`).");
+  print("   - Update the `Run` action to use the corresponding flavor's xcconfig file.");
+  print("5. Save the schemes and ensure they are shared (check the `Shared` checkbox).");
+  print("6. Update the `Info.plist` file for each flavor if needed (e.g., app name, icons).");
+  print("7. Build and run the app using the appropriate scheme.");
+  print("\nℹ️ For more details, refer to the Flutter documentation on flavors: https://docs.flutter.dev/deployment/flavors");
+}
+
+/// Checks if xcodegen is installed
+bool _isXcodegenInstalled() {
+  try {
+    ProcessResult result = Process.runSync('xcodegen', ['--version']);
+    return result.exitCode == 0;
+  } catch (e) {
+    return false;
   }
 }
 
